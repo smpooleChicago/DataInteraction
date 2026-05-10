@@ -1,0 +1,29 @@
+/* ── CSS custom properties ────────────────────────────────────── */
+:root {
+  --sans: "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+  --serif: Georgia, "Times New Roman", serif;
+  --red: #c0392b;
+  --blue: #1a3a6b;
+  --bg: #ffffff;
+  --text: #1a1a1a;
+}
+
+/* ── Reset ────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+#app {
+  min-height: 100vh;
+}
