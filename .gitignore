@@ -9,3 +9,13 @@ dist/
 .DS_Store
 *.log
 app/public/data/articles_by_country_month_theme.csv
+
+# Large source data (gzip and commit the .gz versions instead)
+**/articles_by_country_month_theme.csv
+
+# Build outputs
+app/dist/
+app/build/
+.svelte-kit/
+node_modules/
+.DS_Store
