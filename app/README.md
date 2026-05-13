@@ -23,20 +23,28 @@ npm run dev          # → http://localhost:5173
 app/
 ├── public/
 │   └── data/
-│       ├── country_daily_merged.csv      # GDELT-derived daily counts (291k rows)
-│       ├── fips-10-4-to-iso-country-codes.csv  # FIPS → ISO alpha-2 + name crosswalk
-│       └── countries-110m.json           # world-atlas TopoJSON (copied from node_modules)
+│       ├── country_daily_merged.csv           # GDELT daily counts (291k rows)
+│       ├── fips-10-4-to-iso-country-codes.csv # FIPS → ISO alpha-2 + name crosswalk
+│       ├── countries-110m.json                # world-atlas TopoJSON
+│       ├── themes_global_month.csv            # Top 20 themes globally per month (1 040 rows)
+│       ├── themes_by_country_month.csv        # Top 20 themes per country per month (206k rows)
+│       └── articles_by_country_month_theme.csv # Sample article URLs, 144 MB — lazy-loaded
 ├── src/
 │   ├── lib/
-│   │   ├── stores.js   # Svelte writable stores: selectedCountries, dateRange, showEvents
-│   │   └── data.js     # loadData(), computeCountryAverages(), computeTimeSeries(), computeP95()
+│   │   ├── stores.js   # selectedCountries, dateRange, showEvents, selectedYearMonth
+│   │   └── data.js     # loadData(), loadThemesData(), computeTopThemes(),
+│   │   │               # ensureArticlesLoaded(), queryArticles(), …
 │   ├── components/
-│   │   ├── Choropleth.svelte       # Equal Earth world map with colour scale + click-toggle
-│   │   ├── TimeSeries.svelte       # Aggregated line chart with event annotations
-│   │   └── DateRangeSlider.svelte  # d3.brushX two-handle date range control
+│   │   ├── Choropleth.svelte       # Equal Earth world map, click-toggle, clear-month on click
+│   │   ├── TimeSeries.svelte       # Line chart, event annotations, grey month-highlight rect
+│   │   ├── DateRangeSlider.svelte  # d3.brushX range control
+│   │   ├── ThemesPanel.svelte      # Themes section orchestrator
+│   │   ├── MonthYearPicker.svelte  # Custom year + month dropdowns with validation
+│   │   ├── ThemeChips.svelte       # 5 mutually-exclusive theme chip buttons
+│   │   └── ArticleList.svelte      # Up to 5 article links with loading state
 │   ├── App.svelte    # Orchestrator: data loading, reactive derived state, layout
-│   ├── main.js       # Svelte entry point
-│   └── app.css       # Global reset + CSS custom properties
+│   ├── main.js
+│   └── app.css
 ├── index.html
 ├── vite.config.js
 └── package.json
@@ -71,8 +79,33 @@ the combined aggregate for that set — one line, not one per country. The x-axi
 date range selected via the brush.
 
 **Stores**: `selectedCountries` (Set of FIPS codes), `dateRange` ([Date, Date]),
-`showEvents` (boolean). `App.svelte` has reactive `$:` blocks that recompute
-`countryAverages` and `timeSeriesData` whenever these stores change.
+`showEvents` (boolean), `selectedYearMonth` ("YYYY-MM" string or null).
+`App.svelte` has reactive `$:` blocks that recompute `countryAverages` and
+`timeSeriesData` whenever these stores change.
+
+**Themes panel**: loaded on initial page load alongside the main CSV.
+`themes_global_month.csv` and `themes_by_country_month.csv` are pre-grouped into
+`Map<year_month, …>` structures at load time for O(1) lookups per month.
+Top-5 theme computation aggregates across selected FIPS codes when countries are
+selected, or falls back to the global pre-ranked list when none are selected.
+
+**Article lazy-loader** (`ensureArticlesLoaded` in `data.js`): the 144 MB
+`articles_by_country_month_theme.csv` is **not** fetched on initial page load.
+It is fetched with `d3.csv()` the first time a user clicks a theme chip. After
+parsing, two in-memory indexes are built:
+- `Map<"ym|fips|theme", row[]>` — for per-country lookups
+- `Map<"ym|theme", row[]>` — for global lookups (≤ 20 unique URLs per cell)
+
+Subsequent theme clicks resolve against these indexes synchronously.
+Parsing time on first click is typically 5–15 s depending on hardware; a
+"Loading articles…" indicator is shown during that window. A Web Worker is not
+used — the blocking window is short enough on the target hardware that the
+simpler inline approach was preferred.
+
+**Month-highlight rect**: when a year+month is selected in the themes panel,
+`TimeSeries` renders a semi-transparent grey `<rect>` spanning that calendar
+month behind the line. Clicking the choropleth, time series, or date slider
+clears `selectedYearMonth` and removes the rect.
 
 ---
 

@@ -226,3 +226,127 @@ export function computeP95(countryAverages) {
   const idx = Math.min(Math.floor(values.length * 0.95), values.length - 1);
   return values[idx];
 }
+
+// ── Themes data ─────────────────────────────────────────────────────────────
+
+// Load both theme CSVs on initial page load.
+// Returns:
+//   globalThemes:  Map<year_month, Array<{theme, theme_count, rank}>>
+//   countryThemes: Map<year_month, Map<fips, Array<{theme, theme_count, rank}>>>
+export async function loadThemesData() {
+  const [globalRaw, countryRaw] = await Promise.all([
+    d3.csv('/data/themes_global_month.csv'),
+    d3.csv('/data/themes_by_country_month.csv'),
+  ]);
+
+  const globalThemes = new Map();
+  for (const row of globalRaw) {
+    const ym = row.year_month;
+    if (!globalThemes.has(ym)) globalThemes.set(ym, []);
+    globalThemes.get(ym).push({ theme: row.theme, theme_count: +row.theme_count, rank: +row.rank });
+  }
+
+  const countryThemes = new Map();
+  for (const row of countryRaw) {
+    const ym = row.year_month;
+    const fips = row.country;
+    if (!countryThemes.has(ym)) countryThemes.set(ym, new Map());
+    const ymMap = countryThemes.get(ym);
+    if (!ymMap.has(fips)) ymMap.set(fips, []);
+    ymMap.get(fips).push({ theme: row.theme, theme_count: +row.theme_count, rank: +row.rank });
+  }
+
+  return { globalThemes, countryThemes };
+}
+
+// Derive the top-5 themes for a given year_month + set of selected FIPS codes.
+// Uses globalThemes when nothing is selected, otherwise aggregates countryThemes.
+export function computeTopThemes(yearMonth, selectedFips, globalThemes, countryThemes) {
+  if (!yearMonth) return [];
+
+  if (!selectedFips || selectedFips.size === 0) {
+    return (globalThemes.get(yearMonth) || []).slice(0, 5);
+  }
+
+  // Sum theme_count across all selected countries for this month.
+  const totals = new Map();
+  const ymMap = countryThemes.get(yearMonth);
+  if (ymMap) {
+    for (const fips of selectedFips) {
+      for (const row of (ymMap.get(fips) || [])) {
+        totals.set(row.theme, (totals.get(row.theme) || 0) + row.theme_count);
+      }
+    }
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([theme, theme_count]) => ({ theme, theme_count }));
+}
+
+// ── Article lazy-loader ──────────────────────────────────────────────────────
+
+// Module-level cache. Populated once on first theme click; subsequent calls are O(1).
+let _articleCountryIndex = null; // Map<"ym|fips|theme", row[]>
+let _articleGlobalIndex = null;  // Map<"ym|theme", row[]>  (≤20 unique URLs per cell)
+let _loadPromise = null;
+
+// Returns a promise that resolves when the article index is ready.
+// Subsequent calls return the cached result immediately.
+export function ensureArticlesLoaded() {
+  if (_articleCountryIndex) return Promise.resolve();
+  if (_loadPromise) return _loadPromise;
+
+  _loadPromise = d3.csv('/data/articles_by_country_month_theme.csv.gz').then(rows => {
+    const ci = new Map();
+    const gi = new Map();
+    const giSeen = new Map(); // "ym|theme" → Set<url> for dedup during build
+
+    for (const row of rows) {
+      // Country index
+      const ck = `${row.year_month}|${row.country}|${row.theme}`;
+      if (!ci.has(ck)) ci.set(ck, []);
+      ci.get(ck).push(row);
+
+      // Global index – cap at 20 unique URLs per (ym, theme)
+      const gk = `${row.year_month}|${row.theme}`;
+      if (!gi.has(gk)) { gi.set(gk, []); giSeen.set(gk, new Set()); }
+      const seen = giSeen.get(gk);
+      if (seen.size < 20 && !seen.has(row.url)) {
+        gi.get(gk).push(row);
+        seen.add(row.url);
+      }
+    }
+
+    _articleCountryIndex = ci;
+    _articleGlobalIndex = gi;
+  });
+
+  return _loadPromise;
+}
+
+// Look up up to 5 article rows for (yearMonth, selectedFips, theme).
+// Assumes ensureArticlesLoaded() has already resolved.
+export function queryArticles(yearMonth, selectedFips, theme) {
+  if (!_articleCountryIndex) return [];
+
+  if (!selectedFips || selectedFips.size === 0) {
+    return (_articleGlobalIndex.get(`${yearMonth}|${theme}`) || []).slice(0, 5);
+  }
+
+  const seen = new Set();
+  const results = [];
+  for (const fips of selectedFips) {
+    const rows = (_articleCountryIndex.get(`${yearMonth}|${fips}|${theme}`) || [])
+      .slice()
+      .sort((a, b) => +a.sample_rank - +b.sample_rank);
+    for (const row of rows) {
+      if (!seen.has(row.url)) {
+        seen.add(row.url);
+        results.push(row);
+        if (results.length >= 5) return results;
+      }
+    }
+  }
+  return results;
+}

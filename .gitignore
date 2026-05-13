@@ -1,0 +1,11 @@
+
+# Claude Code
+.claude/
+.claude/
+node_modules/
+.svelte-kit/
+build/
+dist/
+.DS_Store
+*.log
+app/public/data/articles_by_country_month_theme.csv

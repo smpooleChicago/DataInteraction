@@ -5,13 +5,14 @@
   import Choropleth from './components/Choropleth.svelte';
   import TimeSeries from './components/TimeSeries.svelte';
   import DateRangeSlider from './components/DateRangeSlider.svelte';
+  import ThemesPanel from './components/ThemesPanel.svelte';
 
-  import { selectedCountries, dateRange, showEvents } from './lib/stores.js';
+  import { selectedCountries, dateRange, showEvents, selectedYearMonth } from './lib/stores.js';
   import {
     loadData,
     computeCountryAverages,
     computeTimeSeries,
-    computeP95,
+    loadThemesData,
   } from './lib/data.js';
 
   // Loaded state
@@ -30,14 +31,15 @@
   // TopoJSON topology
   let topology = null;
 
+  // Theme data (loaded alongside main data)
+  let globalThemes = null;   // Map<year_month, Array<{theme,theme_count,rank}>>
+  let countryThemes = null;  // Map<year_month, Map<fips, Array<{...}>>>
+
   // Derived: country averages for current date range
   $: countryAverages =
     dateMap && $dateRange && fipsToNumeric && numericToName
       ? computeCountryAverages(dateMap, $dateRange, fipsToNumeric, numericToName)
       : new Map();
-
-  // Derived: p95 of current averages (color scale domain)
-  $: p95 = countryAverages.size > 0 ? computeP95(countryAverages) : 0.05;
 
   // Derived: time series for selected countries (or global)
   $: timeSeriesData =
@@ -57,13 +59,15 @@
 
   onMount(async () => {
     try {
-      const [data, topo] = await Promise.all([
+      const [data, topo, themes] = await Promise.all([
         loadData(),
         d3.json('/data/countries-110m.json'),
+        loadThemesData(),
       ]);
 
       ({ dateMap, fipsToName, fipsToNumeric, numericToFips, numericToName, minDate, maxDate } = data);
       topology = topo;
+      ({ globalThemes, countryThemes } = themes);
 
       dateRange.set([minDate, maxDate]);
       ready = true;
@@ -97,13 +101,8 @@
     <div class="state-msg">Loading 290 000 rows…</div>
   {:else}
 
-    <!-- ── Controls ─────────────────────────────────────────────── -->
+    <!-- ── Controls (selection) ──────────────────────────────────── -->
     <div class="controls">
-      <label class="events-toggle">
-        <input type="checkbox" bind:checked={$showEvents} />
-        Show key events
-      </label>
-
       {#if $selectedCountries.size > 0}
         <button class="clear-btn" on:click={clearSelection}>
           Clear selection ({$selectedCountries.size} {$selectedCountries.size === 1 ? 'country' : 'countries'})
@@ -113,15 +112,9 @@
       {/if}
     </div>
 
-    <!-- ── Date brush ─────────────────────────────────────────────── -->
-    <section class="section-brush">
-      <div class="brush-label">Filter date range</div>
-      <DateRangeSlider {minDate} {maxDate} />
-    </section>
-
     <!-- ── Choropleth ─────────────────────────────────────────────── -->
     <section class="section-map">
-      <Choropleth {topology} {countryAverages} {p95} />
+      <Choropleth {topology} {countryAverages} />
     </section>
 
     <!-- ── Time series ───────────────────────────────────────────── -->
@@ -131,14 +124,30 @@
           {$selectedCountries.size === 0 ? 'Global coverage rate' : `Coverage rate – ${tsLabel}`}
         </span>
         <span class="ts-note">7-day rolling average</span>
+        <label class="events-toggle">
+          <input type="checkbox" bind:checked={$showEvents} />
+          Show key events
+        </label>
       </div>
       <TimeSeries
         {timeSeriesData}
         dateRange={$dateRange}
         label={tsLabel}
         showEvents={$showEvents}
+        highlightMonth={$selectedYearMonth}
       />
     </section>
+
+    <!-- ── Date brush (below chart) ──────────────────────────────── -->
+    <section class="section-brush">
+      <div class="brush-label">Filter date range</div>
+      <DateRangeSlider {minDate} {maxDate} />
+    </section>
+
+    <!-- ── Themes panel ──────────────────────────────────────────── -->
+    {#if globalThemes && countryThemes}
+      <ThemesPanel {globalThemes} {countryThemes} />
+    {/if}
 
   {/if}
 
@@ -199,19 +208,6 @@
     font-size: 13px;
   }
 
-  .events-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    color: #333;
-  }
-
-  .events-toggle input {
-    cursor: pointer;
-    accent-color: #c0392b;
-  }
-
   .clear-btn {
     background: none;
     border: 1px solid #1a3a6b;
@@ -234,19 +230,6 @@
   }
 
   /* Sections */
-  .section-brush {
-    margin-top: 8px;
-  }
-
-  .brush-label {
-    font-family: var(--sans);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #999;
-    margin-bottom: 2px;
-  }
-
   .section-map {
     margin-top: 6px;
   }
@@ -257,7 +240,7 @@
 
   .ts-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
     margin-bottom: 50px;
   }
@@ -273,6 +256,35 @@
     font-family: var(--sans);
     font-size: 12px;
     color: #999;
+  }
+
+  .events-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    cursor: pointer;
+    color: #333;
+    font-family: var(--sans);
+    font-size: 13px;
+  }
+
+  .events-toggle input {
+    cursor: pointer;
+    accent-color: #c0392b;
+  }
+
+  .section-brush {
+    margin-top: 12px;
+  }
+
+  .brush-label {
+    font-family: var(--sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #999;
+    margin-bottom: 2px;
   }
 
   /* Loading / error */

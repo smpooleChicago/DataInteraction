@@ -1,5 +1,6 @@
 <script>
   import * as d3 from 'd3';
+  import { selectedYearMonth } from '../lib/stores.js';
 
   // [{date: Date, value: number|null}] – already 7-day smoothed
   export let timeSeriesData = [];
@@ -7,6 +8,8 @@
   export let dateRange = null;
   export let label = 'Global';
   export let showEvents = false;
+  // "YYYY-MM" or null – renders a grey background rect for the selected month
+  export let highlightMonth = null;
 
   const KEY_EVENTS = [
     { date: new Date('2022-02-24'), label: 'Invasion begins' },
@@ -66,9 +69,22 @@
 
   // Show every other x tick label to avoid crowding
   $: xTicksLabeled = xTicks.filter((_, i) => i % 2 === 0 || xTicks.length <= 8);
+
+  // Grey highlight rect for selected month
+  const parseYM = d3.timeParse('%Y-%m');
+  $: monthRect = (() => {
+    if (!highlightMonth) return null;
+    const d0 = parseYM(highlightMonth);
+    if (!d0) return null;
+    const d1 = d3.timeMonth.offset(d0, 1);
+    const x0 = xScale(d0);
+    const x1 = xScale(d1);
+    if (x1 <= 0 || x0 >= IW) return null; // outside visible window
+    return { x: Math.max(0, x0), width: Math.min(IW, x1) - Math.max(0, x0) };
+  })();
 </script>
 
-<div class="ts-wrap">
+<div class="ts-wrap" on:click={() => selectedYearMonth.set(null)} role="presentation">
   <svg width={W} height={H} style="overflow:visible;display:block;">
     <g transform="translate({M.left},{M.top})">
 
@@ -83,6 +99,19 @@
 
       <!-- Zero line -->
       <line x1="0" x2={IW} y1={yScale(0)} y2={yScale(0)} stroke="#ccc" stroke-width="1" />
+
+      <!-- Selected-month highlight rect (behind line, in front of gridlines) -->
+      {#if monthRect}
+        <rect
+          x={monthRect.x}
+          y="0"
+          width={monthRect.width}
+          height={IH}
+          fill="#999"
+          fill-opacity="0.15"
+          pointer-events="none"
+        />
+      {/if}
 
       <!-- Event annotations (vertical dashed lines + rotated labels) -->
       {#each visibleEvents as ev}

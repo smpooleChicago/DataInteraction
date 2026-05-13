@@ -1,12 +1,11 @@
 <script>
   import * as d3 from 'd3';
   import * as topojson from 'topojson-client';
-  import { selectedCountries } from '../lib/stores.js';
+  import { selectedCountries, selectedYearMonth } from '../lib/stores.js';
 
   export let topology = null;
   // Map<numericId, { fips, name, avgRatio, totalWar, totalAll }>
   export let countryAverages = new Map();
-  export let p95 = 0.05;
 
   const W = 960;
   const H = 500;
@@ -14,6 +13,9 @@
   const LEGEND_H = 10;
   const NO_DATA_COLOR = '#d4d4d4';
   const OCEAN_COLOR = '#c9dff0';
+
+  // Static linear domain: global max when full date range is selected.
+  const STATIC_MAX = 0.215; // 21.5%
 
   $: countries = topology
     ? topojson.feature(topology, topology.objects.countries)
@@ -25,10 +27,23 @@
 
   $: pathGen = d3.geoPath(projection);
 
-  $: colorDomain = [0, Math.max(p95, 0.001)];
-  $: colorScale = d3.scaleSequential(d3.interpolateReds)
-    .domain(colorDomain)
+  // Static linear scale — does not change with date range.
+  const colorScale = d3.scaleSequential(d3.interpolateReds)
+    .domain([0, STATIC_MAX])
     .clamp(true);
+
+  // Pre-compute fills reactively so Svelte re-evaluates when selectedCountries changes.
+  $: fills = (() => {
+    const map = new Map();
+    for (const [numId, d] of countryAverages) {
+      if ($selectedCountries.size > 0 && !$selectedCountries.has(d.fips)) {
+        map.set(numId, '#c8c8c8');
+      } else {
+        map.set(numId, colorScale(d.avgRatio));
+      }
+    }
+    return map;
+  })();
 
   // Tooltip
   let tipVisible = false;
@@ -36,24 +51,6 @@
   let tipY = 0;
   let tipData = null;
   let containerEl;
-
-  const SELECTED_COLOR = '#ffd700';
-
-  function getFill(numId) {
-    const d = countryAverages.get(numId);
-    if (!d) return NO_DATA_COLOR;
-    return $selectedCountries.has(d.fips) ? SELECTED_COLOR : colorScale(d.avgRatio);
-  }
-
-  function getStroke(numId) {
-    const d = countryAverages.get(numId);
-    if (!d) return '#fff';
-    return $selectedCountries.has(d.fips) ? '#c8a800' : '#fff';
-  }
-
-  function getStrokeWidth(numId) {
-    return 0.5;
-  }
 
   function handleClick(numId) {
     const d = countryAverages.get(numId);
@@ -87,10 +84,10 @@
     tipVisible = false;
   }
 
-  // Legend gradient stops
-  $: legendStops = d3.range(0, 1.01, 0.1).map(t => ({
+  // Legend gradient stops — linearly spaced.
+  const legendStops = d3.range(0, 1.01, 0.1).map(t => ({
     offset: `${(t * 100).toFixed(0)}%`,
-    color: colorScale(t * p95),
+    color: colorScale(t * STATIC_MAX),
   }));
 
   function fmtPct(v) {
@@ -100,7 +97,9 @@
 
 <div class="wrap" bind:this={containerEl}>
   {#if countries}
-    <svg width={W} height={H + 36} style="display:block;">
+    <!-- Any click on the choropleth (country or ocean) clears the themes month selection -->
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
+    <svg width={W} height={H + 36} style="display:block;" role="img" aria-label="World map" on:click={() => selectedYearMonth.set(null)}>
       <!-- Ocean -->
       <path d={pathGen({ type: 'Sphere' })} fill={OCEAN_COLOR} />
 
@@ -110,9 +109,9 @@
         {@const hasData = countryAverages.has(id)}
         <path
           d={pathGen(feat)}
-          fill={getFill(id)}
-          stroke={getStroke(id)}
-          stroke-width={getStrokeWidth(id)}
+          fill={fills.get(id) ?? NO_DATA_COLOR}
+          stroke="#fff"
+          stroke-width="0.5"
           style="cursor:{hasData ? 'pointer' : 'default'}"
           role={hasData ? 'button' : 'img'}
           tabindex={hasData ? 0 : -1}
@@ -143,15 +142,9 @@
           </linearGradient>
         </defs>
         <rect width={LEGEND_W} height={LEGEND_H} fill="url(#cmap)" rx="1" />
-        <text x="0" y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="start">
-          {fmtPct(0)}
-        </text>
-        <text x={LEGEND_W / 2} y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="middle">
-          {fmtPct(p95 / 2)}
-        </text>
-        <text x={LEGEND_W} y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="end">
-          {fmtPct(p95)}+
-        </text>
+        <text x="0" y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="start">0%</text>
+        <text x={LEGEND_W / 2} y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="middle">{(STATIC_MAX / 2 * 100).toFixed(1)}%</text>
+        <text x={LEGEND_W} y={LEGEND_H + 12} font-size="9.5" fill="#555" font-family="var(--sans)" text-anchor="end">{(STATIC_MAX * 100).toFixed(1)}%+</text>
       </g>
     </svg>
 
@@ -208,5 +201,9 @@
     text-align: center;
     color: #aaa;
     font-family: var(--sans);
+  }
+
+  :global(svg path:focus) {
+    outline: none;
   }
 </style>

@@ -1,7 +1,7 @@
 <script>
   import * as d3 from 'd3';
   import { onMount } from 'svelte';
-  import { dateRange } from '../lib/stores.js';
+  import { dateRange, selectedYearMonth } from '../lib/stores.js';
 
   export let minDate;
   export let maxDate;
@@ -49,7 +49,7 @@
   });
 </script>
 
-<div class="slider-outer">
+<div class="slider-outer" on:mousedown={() => selectedYearMonth.set(null)} role="presentation">
   <svg width={W} height={SVG_H} bind:this={svgEl} style="display:block;">
     <g transform="translate({ML}, 4)">
       <!-- Track background -->
