@@ -1,4 +1,5 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
   import { selectedCountries, selectedYearMonth } from '../lib/stores.js';
   import { computeTopThemes, ensureArticlesLoaded, queryArticles } from '../lib/data.js';
   import MonthYearPicker from './MonthYearPicker.svelte';
@@ -12,6 +13,16 @@
   let selectedTheme = null;
   let articles = null;
   let loadingArticles = false;
+
+  // Info bubble state
+  let infoOpen = false;
+  let infoEl;   // wraps the "i" button + popup — used for click-outside detection
+
+  function handleDocClick(e) {
+    if (infoOpen && infoEl && !infoEl.contains(e.target)) infoOpen = false;
+  }
+  onMount(()  => document.addEventListener('click', handleDocClick, true));
+  onDestroy(() => document.removeEventListener('click', handleDocClick, true));
 
   // Top-5 themes for the current (yearMonth × country selection) combination.
   $: top5 = computeTopThemes($selectedYearMonth, $selectedCountries, globalThemes, countryThemes);
@@ -79,6 +90,24 @@
 
   <div class="picker-row">
     <MonthYearPicker />
+    <div class="info-wrap" bind:this={infoEl}>
+      <!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
+      <button
+        class="info-btn"
+        aria-label="How this works"
+        aria-expanded={infoOpen}
+        on:click|stopPropagation={() => infoOpen = !infoOpen}
+      >i</button>
+      {#if infoOpen}
+        <div class="info-bubble" role="tooltip">
+          Choose a year and month to reveal the top&nbsp;5 news themes dominating
+          coverage during that period. If countries are selected on the map,
+          themes reflect their media only; otherwise they show global totals.
+          Click a theme chip to load sample article links sourced directly
+          from GDELT.
+        </div>
+      {/if}
+    </div>
   </div>
 
   {#if $selectedYearMonth}
@@ -138,6 +167,58 @@
   /* ── Picker row ── */
   .picker-row {
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ── Info bubble ── */
+  .info-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .info-btn {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid #bbb;
+    background: none;
+    font-family: var(--serif);
+    font-size: 11px;
+    font-style: italic;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: border-color 0.12s, color 0.12s;
+  }
+
+  .info-btn:hover {
+    border-color: #777;
+    color: #444;
+  }
+
+  .info-bubble {
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 0;
+    z-index: 200;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 13px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    color: #444;
+    line-height: 1.55;
+    width: 280px;
   }
 
   /* ── Themes box ── */

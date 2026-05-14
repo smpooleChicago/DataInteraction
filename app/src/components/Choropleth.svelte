@@ -6,6 +6,8 @@
   export let topology = null;
   // Map<numericId, { fips, name, avgRatio, totalWar, totalAll }>
   export let countryAverages = new Map();
+  export let interactive = true;   // false → hover tooltip only, no click selection
+  export let highlightFips = new Set(); // FIPS codes to outline in dark blue
 
   const W = 960;
   const H = 500;
@@ -33,10 +35,11 @@
     .clamp(true);
 
   // Pre-compute fills reactively so Svelte re-evaluates when selectedCountries changes.
+  // When interactive=false the selection store is ignored (no greying on scrolly maps).
   $: fills = (() => {
     const map = new Map();
     for (const [numId, d] of countryAverages) {
-      if ($selectedCountries.size > 0 && !$selectedCountries.has(d.fips)) {
+      if (interactive && $selectedCountries.size > 0 && !$selectedCountries.has(d.fips)) {
         map.set(numId, '#c8c8c8');
       } else {
         map.set(numId, colorScale(d.avgRatio));
@@ -99,7 +102,7 @@
   {#if countries}
     <!-- Any click on the choropleth (country or ocean) clears the themes month selection -->
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-    <svg width={W} height={H + 36} style="display:block;" role="img" aria-label="World map" on:click={() => selectedYearMonth.set(null)}>
+    <svg width={W} height={H + 36} style="display:block;" role="img" aria-label="World map" on:click={() => interactive && selectedYearMonth.set(null)}>
       <!-- Ocean -->
       <path d={pathGen({ type: 'Sphere' })} fill={OCEAN_COLOR} />
 
@@ -112,12 +115,12 @@
           fill={fills.get(id) ?? NO_DATA_COLOR}
           stroke="#fff"
           stroke-width="0.5"
-          style="cursor:{hasData ? 'pointer' : 'default'}"
-          role={hasData ? 'button' : 'img'}
-          tabindex={hasData ? 0 : -1}
+          style="cursor:{hasData && interactive ? 'pointer' : 'default'}"
+          role={hasData && interactive ? 'button' : 'img'}
+          tabindex={hasData && interactive ? 0 : -1}
           aria-label={hasData ? `${countryAverages.get(id)?.name ?? ''}` : undefined}
-          on:click={() => handleClick(id)}
-          on:keydown={e => (e.key === 'Enter' || e.key === ' ') && handleClick(id)}
+          on:click={() => interactive && handleClick(id)}
+          on:keydown={e => interactive && (e.key === 'Enter' || e.key === ' ') && handleClick(id)}
           on:mouseover={e => handleMouseover(e, id)}
           on:focus={e => handleMouseover(e, id)}
           on:mousemove={e => handleMousemove(e, id)}
@@ -128,6 +131,17 @@
 
       <!-- Sphere border -->
       <path d={pathGen({ type: 'Sphere' })} fill="none" stroke="#aaa" stroke-width="0.5" />
+
+      <!-- Highlight overlay: dark blue stroke on top for highlighted FIPS -->
+      {#if highlightFips.size > 0}
+        {#each countries.features as feat}
+          {@const id = +feat.id}
+          {@const d = countryAverages.get(id)}
+          {#if d && highlightFips.has(d.fips)}
+            <path d={pathGen(feat)} fill="none" stroke="#1a3a6b" stroke-width="1.5" pointer-events="none" />
+          {/if}
+        {/each}
+      {/if}
 
       <!-- Legend -->
       <g transform="translate({W - LEGEND_W - 16}, {H + 4})">
