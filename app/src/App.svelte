@@ -8,6 +8,7 @@
   import ThemesPanel from './components/ThemesPanel.svelte';
   import Scrolly from './components/Scrolly.svelte';
   import Sparkline from './components/Sparkline.svelte';
+  import TrendsScatter from './components/TrendsScatter.svelte';
 
   import { selectedCountries, dateRange, showEvents, selectedYearMonth } from './lib/stores.js';
   import {
@@ -92,6 +93,23 @@
       body: `Averaged over the full period, three patterns explain who keeps
              covering the war. Toggle between them.`,
       highlightOptions: ['Proximity', 'Economic ties', 'Political ties'],
+    },
+    {
+      id: 'audience',
+      range: null,
+      eyebrow: 'Search vs press',
+      title: 'And what did the audience actually want?',
+      body: `Press attention is not the same as public attention. We pair each
+             country's share of war coverage in its own media — the same ratio
+             the map above uses — with its audience's share of Google searches
+             for "Ukraine" in the script they use most: English, Russian,
+             Chinese, Arabic or Japanese. Countries above the dashed line
+             searched more than their press supplied; countries below it were
+             covered more heavily than their audience asked.`,
+      callout: `Caveats: Google Trends excludes Yandex (Russia), Baidu (China)
+                and Naver (Korea); the five-language max-aggregator is a
+                heuristic, not a strictly comparable measure; the four-year
+                window is a single aggregate.`,
     },
   ];
 
@@ -299,22 +317,31 @@
 
       <svelte:fragment slot="viz">
         <div class="scrolly-viz-stack" bind:clientWidth={scrollyVizW}>
-          <Sparkline
-            data={sparklineSeries}
-            activeRange={stageDateRange}
-            label={activeStage?.rangeLabel ?? (activeStage?.id === 'intro' ? '' : 'Full period')}
-          />
-          <div
-            class="choropleth-scaler"
-            style="width:960px; height:{choroplethScaledH}px; transform:scale({choroplethScale}); transform-origin:top left;"
-          >
-            <Choropleth
-              {topology}
-              countryAverages={scrollyCountryAverages}
-              interactive={false}
-              highlightFips={activeStage?.id === 'who-reports' ? highlightedFips : new Set()}
+          {#if activeStage?.id === 'audience'}
+            <div
+              class="scatter-scaler"
+              style="width:960px; transform:scale({choroplethScale}); transform-origin:top left;"
+            >
+              <TrendsScatter />
+            </div>
+          {:else}
+            <Sparkline
+              data={sparklineSeries}
+              activeRange={stageDateRange}
+              label={activeStage?.rangeLabel ?? (activeStage?.id === 'intro' ? '' : 'Full period')}
             />
-          </div>
+            <div
+              class="choropleth-scaler"
+              style="width:960px; height:{choroplethScaledH}px; transform:scale({choroplethScale}); transform-origin:top left;"
+            >
+              <Choropleth
+                {topology}
+                countryAverages={scrollyCountryAverages}
+                interactive={false}
+                highlightFips={activeStage?.id === 'who-reports' ? highlightedFips : new Set()}
+              />
+            </div>
+          {/if}
         </div>
       </svelte:fragment>
     </Scrolly>
@@ -453,6 +480,7 @@
   :global(.step--fade)         { min-height: 115vh; }
   :global(.step--now)          { min-height: 90vh; }
   :global(.step--who-reports)  { min-height: 130vh; }
+  :global(.step--audience)     { min-height: 110vh; }
 
   /* ── Who-reports toggle ──────────────────────────────────────────────── */
   .highlight-toggle {
