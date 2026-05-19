@@ -100,16 +100,15 @@
       eyebrow: 'Search vs press',
       title: 'And what did the audience actually want?',
       body: `Press attention is not the same as public attention. We pair each
-             country's share of war coverage in its own media — the same ratio
-             the map above uses — with its audience's share of Google searches
-             for "Ukraine" in the script they use most: English, Russian,
-             Chinese, Arabic or Japanese. Countries above the dashed line
-             searched more than their press supplied; countries below it were
-             covered more heavily than their audience asked.`,
+             country's share of war coverage in its own media — with its audience's share of Google searches
+             for war-specific terms ("Ukraine war", "Russian invasion", and
+             native-script equivalents) in the script they use most: English,
+             Russian, Chinese, Arabic or Japanese. Countries above the dashed
+             line searched more than their press supplied; countries below it
+             were covered more heavily than their audience asked.`,
       callout: `Caveats: Google Trends excludes Yandex (Russia), Baidu (China)
                 and Naver (Korea); the five-language max-aggregator is a
-                heuristic, not a strictly comparable measure; the four-year
-                window is a single aggregate.`,
+                heuristic`,
     },
   ];
 

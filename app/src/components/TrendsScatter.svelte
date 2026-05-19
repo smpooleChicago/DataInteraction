@@ -37,6 +37,15 @@
   const sizeFor = (totalReports, max) =>
     d3.scaleSqrt().domain([0, 1]).range([1.8, 9])(totalReports / max);
 
+  // Hand-tuned offsets for labels that still collide after the default
+  // left-of-dot placement. Each entry is [dx, dy] in SVG pixels, keyed by
+  // country_name. Kept centralised so the overrides are auditable in one
+  // place and easy to remove if the data is regenerated.
+  const LABEL_OFFSETS = {
+    'Russia':         [0, 14],   // sits below the Ukraine/Russia dot cluster
+    'United Kingdom': [110, -5],   // lift clear of its own dot
+  };
+
   onMount(async () => {
     try {
       const raw = await d3.csv('/data/trends_vs_coverage.csv', d3.autoType);
@@ -113,7 +122,7 @@
         {/each}
         <text transform="translate(-46,{innerH / 2}) rotate(-90)"
               text-anchor="middle" class="axis-label">
-          Search interest in "Ukraine" — max across languages (percentile rank)
+          Search interest in Russia–Ukraine war terms
         </text>
       </g>
 
@@ -161,9 +170,11 @@
            Transparent — no background rect — with a white text halo so the
            name stays legible when it crosses faded dots. Anchored to the
            LEFT of each dot since the labelled countries all sit on the
-           right half of the chart. -->
+           right half of the chart. Per-country dx/dy overrides come from
+           LABEL_OFFSETS for the few labels that still collide. -->
       {#each labeled as d}
-        <g transform="translate({x(d.coverage_pct_rank) - d._r - 5},{y(d.trends_pct_rank)})">
+        {@const off = LABEL_OFFSETS[d.country_name] ?? [0, 0]}
+        <g transform="translate({x(d.coverage_pct_rank) - d._r - 5 + off[0]},{y(d.trends_pct_rank) + off[1]})">
           <text x="0" y="-2" text-anchor="end" class="callout-name">{d.country_name}</text>
         </g>
       {/each}

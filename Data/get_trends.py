@@ -10,13 +10,20 @@ X axis (coverage_share): WITHIN-COUNTRY share — country's war reports as a
   from country_daily_merged.csv). This matches what the choropleth uses, so
   the two visualisations now measure compatible things.
 
-Y axis (trends_score): per-country interest in "Ukraine" measured in the
-  search language with the strongest signal (English, Russian, Chinese,
-  Arabic, Japanese). One separate interest_by_region call per language;
-  per-country MAX across the five normalised scores. Querying all five
-  keywords in a single call would return within-country share-of-bundle
-  instead of spatial intensity — the same bug that flattened the previous
-  version of this script.
+Y axis (trends_score): per-country interest in the Russia-Ukraine war,
+  measured via war-specific OR-query groups in each of five languages
+  (English, Russian, Chinese, Arabic, Japanese). One separate
+  interest_by_region call per language; per-country MAX across the five
+  normalised scores. Querying all five groups in a single call would
+  return within-country share-of-bundle instead of spatial intensity —
+  the same bug that flattened the previous version of this script.
+
+  Switched away from the bare keyword "Ukraine" because that picked up
+  tourism, football, Eurovision, etc. War-specific phrasings ("Ukraine
+  war", "Russian invasion", "война на Украине", …) isolate the conflict
+  signal at the cost of dropping low-volume markets where war-specific
+  searches don't clear Trends' volume floor — which we treat as a true
+  negative, not a measurement gap.
 
 Setup:
     pip install pytrends pandas country_converter
@@ -43,15 +50,17 @@ HL              = "en-US"
 SLEEP_SECONDS   = 5      # between successive pytrends calls
 MIN_TOTAL_ALL   = 100    # exclude countries with effectively no GDELT presence
 
-# Native-script "Ukraine" so non-English markets aren't undercounted. Queried
-# as separate single-keyword interest_by_region calls (multi-keyword in one
+# War-specific OR-groups in five languages so non-English markets aren't
+# undercounted. Each value is a pytrends "a + b + c" OR-group — Trends
+# returns spatial intensity for the union of those phrasings. Run as
+# separate single-payload interest_by_region calls (multi-payload in one
 # call returns share-of-bundle, not intensity), then max-merged per country.
 KEYWORDS = {
-    "en": "Ukraine",
-    "ru": "Украина",
-    "zh": "乌克兰",
-    "ar": "أوكرانيا",
-    "ja": "ウクライナ",
+    "en": "Ukraine war + Russia Ukraine war + war in Ukraine + Ukraine invasion",
+    "ru": "война на Украине + Украина война + вторжение в Украину",
+    "zh": "乌克兰战争 + 俄乌战争 + 俄乌冲突",
+    "ar": "حرب أوكرانيا + الحرب في أوكرانيا + الغزو الروسي لأوكرانيا",
+    "ja": "ウクライナ戦争 + ウクライナ侵攻 + ロシア ウクライナ",
 }
 
 # FIPS 10-4 -> ISO 3166-1 alpha-2. Covers the countries that actually appear
@@ -120,10 +129,11 @@ def load_gdelt_within_country_share():
 
 
 def fetch_trends_multilingual():
-    """One interest_by_region call per language keyword. Each returns
-    per-country spatial intensity (0-100). Merged by country name; final
+    """One interest_by_region call per language OR-group. Each returns
+    per-country spatial intensity (0-100) for the union of war-specific
+    phrasings in that language. Merged by country name; final
     trends_score = max across languages, so a country's score reflects
-    the language it searched 'Ukraine' in most strongly."""
+    the language it searched war-related terms in most strongly."""
     pytrends = TrendReq(hl=HL, tz=0, retries=3, backoff_factor=1)
     frames = []
     for lang, kw in KEYWORDS.items():
